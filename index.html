@@ -1,0 +1,174 @@
+<link rel='stylesheet' href='https://unpkg.com/permutable@0.1.4/styles.css' />
+<script src='https://unpkg.com/regl@1.3.11/dist/regl.js'></script>
+<script type='module'>
+  import standalone from 'https://unpkg.com/permutable@0.1.4/standalone.js'
+
+  function times (n, fn = i => i) {
+    return Array(n).fill().map((n, i) => fn(i))
+  }
+
+  standalone({
+    setup (canvas) {
+      const regl = createREGL({
+        extensions: ['OES_texture_float'],
+        canvas
+      })
+
+      const count = 1000
+      const squared = Math.ceil(Math.sqrt(count))
+      const [cols, rows] = [squared, squared]
+
+      const buffer = regl.buffer(times(cols, col => times(rows, row => [col, row])))
+
+      const createFramebuffer = data => regl.framebuffer({
+        depthStencil: false,
+        color: regl.texture({
+          type: 'float',
+          format: 'rgb',
+          data
+        })
+      })
+
+      const createPingPong = data => [
+        createFramebuffer(data),
+        createFramebuffer(data)
+      ]
+
+      const positions = createPingPong(times(cols, () => times(rows, () => [Math.random(), Math.random(), Math.random()])))
+      const velocities = createPingPong(times(cols, () => times(rows, () => [0.01 * Math.random(), 0.01 * Math.random(), 0])))
+
+      const current = states => ({ tick }) => states[tick % 2]
+      const previous = states => ({ tick }) => states[(tick + 1) % 2]
+
+      const setupSimulation = regl({
+        vert: `
+          precision mediump float;
+          attribute vec2 position;
+          varying vec2 uv;
+
+          void main () {
+            uv = position;
+            gl_Position = vec4(position * 2.0 - 1.0, 1.0, 1.0);
+          }
+        `,
+
+        attributes: {
+          position: [
+            [0, 0],
+            [0, 1],
+            [1, 1],
+            [1, 0]
+          ]
+        },
+
+        elements: [
+          [0, 1, 2],
+          [2, 3, 0]
+        ]
+      })
+
+      const updatePositions = regl({
+        frag: `
+          precision mediump float;
+          varying vec2 uv;
+          uniform sampler2D previousPositions;
+          uniform sampler2D currentVelocities;
+
+          void main () {
+            vec3 position = texture2D(previousPositions, uv).xyz;
+            vec3 velocity = texture2D(currentVelocities, uv).xyz;
+
+            position += velocity;
+
+            position = position - 1.0 * floor(position / 1.0);
+            position = position + 1.0 * ceil(-position / 1.0);
+
+            gl_FragColor = vec4(position, 1.0);
+          }
+        `,
+
+        framebuffer: current(positions),
+
+        uniforms: {
+          previousPositions: previous(positions),
+          currentVelocities: previous(velocities)
+        }
+      })
+
+      const updateVelocities = regl({
+        frag: `
+          precision mediump float;
+          varying vec2 uv;
+          uniform sampler2D previousPositions;
+          uniform sampler2D previousVelocities;
+
+          void main () {
+            vec3 position = texture2D(previousPositions, uv).xyz;
+            vec3 velocity = texture2D(previousVelocities, uv).xyz;
+
+            gl_FragColor = vec4(velocity, 1.0);
+          }
+        `,
+
+        framebuffer: current(velocities),
+
+        uniforms: {
+          previousPositions: previous(positions),
+          previousVelocities: previous(velocities)
+        }
+      })
+
+      const draw = regl({
+        vert: `
+          precision mediump float;
+          attribute vec2 index;
+          uniform vec2 dimensions;
+          uniform sampler2D currentPositions;
+
+          void main () {
+            vec2 sample = index / dimensions;
+            vec3 position = texture2D(currentPositions, sample).xyz;
+
+            gl_PointSize = 4.0;
+            gl_Position = vec4(position * 2.0 - 1.0, 1.0);
+          }
+        `,
+
+        frag: `
+          void main () {
+            gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+          }
+        `,
+
+        attributes: {
+          index: buffer
+        },
+
+        uniforms: {
+          dimensions: [cols, rows],
+          currentPositions: current(positions)
+        },
+
+        count: count,
+
+        primitive: 'points'
+      })
+
+      let frameRequest
+
+      return function render (params) {
+        regl.poll()
+
+        setupSimulation(() => {
+          updateVelocities()
+          updatePositions()
+        })
+
+        draw()
+
+        window.cancelAnimationFrame(frameRequest)
+        window.requestAnimationFrame(time => render(params))
+      }
+    }
+  })
+</script>
