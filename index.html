@@ -7,6 +7,12 @@
     return Array(n).fill().map((n, i) => fn(i))
   }
 
+  const type = new Image()
+
+  type.src = './type.svg'
+  type.width = window.innerWidth * window.devicePixelRatio
+  type.height = window.innerHeight * window.devicePixelRatio
+
   standalone({
     setup (canvas) {
       const regl = createREGL({
@@ -14,11 +20,16 @@
         canvas
       })
 
-      const count = 1000
+      const count = 10000
       const squared = Math.ceil(Math.sqrt(count))
       const [cols, rows] = [squared, squared]
 
       const buffer = regl.buffer(times(cols, col => times(rows, row => [col, row])))
+
+      const typeTexture = regl.texture({
+        data: type,
+        flipY: true
+      })
 
       const createFramebuffer = data => regl.framebuffer({
         depthStencil: false,
@@ -35,7 +46,11 @@
       ]
 
       const positions = createPingPong(times(cols, () => times(rows, () => [Math.random(), Math.random(), Math.random()])))
-      const velocities = createPingPong(times(cols, () => times(rows, () => [0.01 * Math.random(), 0.01 * Math.random(), 0])))
+      const velocities = createPingPong(times(cols, () => times(rows, () => [
+        (Math.random() - 0.5) * 0.01,
+        (Math.random() - 0.5) * 0.01,
+        0
+      ])))
 
       const current = states => ({ tick }) => states[tick % 2]
       const previous = states => ({ tick }) => states[(tick + 1) % 2]
@@ -71,6 +86,7 @@
         frag: `
           precision mediump float;
           varying vec2 uv;
+          uniform sampler2D typeTexture;
           uniform sampler2D previousPositions;
           uniform sampler2D currentVelocities;
 
@@ -78,7 +94,9 @@
             vec3 position = texture2D(previousPositions, uv).xyz;
             vec3 velocity = texture2D(currentVelocities, uv).xyz;
 
-            position += velocity;
+            float type = texture2D(typeTexture, position.xy).a;
+
+            position += velocity * (1.0 - type + 0.1);
 
             position = position - 1.0 * floor(position / 1.0);
             position = position + 1.0 * ceil(-position / 1.0);
@@ -90,6 +108,7 @@
         framebuffer: current(positions),
 
         uniforms: {
+          typeTexture: typeTexture,
           previousPositions: previous(positions),
           currentVelocities: previous(velocities)
         }
@@ -129,7 +148,7 @@
             vec2 sample = index / dimensions;
             vec3 position = texture2D(currentPositions, sample).xyz;
 
-            gl_PointSize = 4.0;
+            gl_PointSize = 2.0;
             gl_Position = vec4(position * 2.0 - 1.0, 1.0);
           }
         `,
