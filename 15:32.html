@@ -107,16 +107,16 @@
           void main () {
             float type = texture2D(typeTexture, uv).a;
 
-            vec2 scaledUv = uv * 5.0 * (30.0 * type + 1.0);
-            // vec2 scaledUv = uv * 2.5 * (15.0 * type + 0.1);
+            // vec2 scaledUv = uv * 5.0 * (30.0 * type + 1.0);
+            vec2 scaledUv = uv * 5.0 / (2.0 * type + 0.1);
 
-            float x = simplex3d(vec3(scaledUv, time / 50.0)) + simplex3d(vec3(scaledUv * 100.0, time / 20.0));
-            float z = simplex3d(vec3(scaledUv + vec2(2.0, 0.0), time / 20.0));
+            float x = simplex3d(vec3(scaledUv, time / 50.0)) + simplex3d(vec3(scaledUv * 100.0, time / 50.0)) / 2.0;
+            float z = simplex3d(vec3(scaledUv + vec2(2.0, 0.0), time / 50.0));
 
             // x *= (type * 0.5 + 0.5);
             // z *= (type * 0.5 + 0.5);
 
-            x += (1.0 - type) * 0.2 - 0.2;
+            x += (1.0 - type) * 0.2 - 0.5;
             // z -= type * 0.5 + 0.1;
 
             gl_FragColor = vec4(x, 0.0, z, 1.0);
@@ -146,10 +146,10 @@
             vec3 velocity = texture2D(previousVelocities, uv).xyz;
             vec3 current = texture2D(velocityField, position.xz).xyz;
 
-            velocity.x -= current.x / 1000.0;
-            velocity.z -= current.z / 1000.0;
+            velocity.x -= current.x / 30000.0;
+            velocity.z -= current.z / 30000.0;
 
-            velocity *= 0.8;
+            velocity *= 0.98;
 
             gl_FragColor = vec4(velocity, 1.0);
           }
@@ -179,7 +179,7 @@
             vec3 velocity = texture2D(currentVelocities, uv).xyz;
             float type = texture2D(typeTexture, position.xz).a;
 
-            position += velocity * (1.0 - type / 2.0);
+            position += velocity * (1.0 - type / 1.2);
 
             position.xz = position.xz - 1.0 * floor(position.xz / 1.0);
 

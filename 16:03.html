@@ -116,7 +116,7 @@
             // x *= (type * 0.5 + 0.5);
             // z *= (type * 0.5 + 0.5);
 
-            x += (1.0 - type) * 0.2 - 0.2;
+            // x += (1.0 - type) * 0.2 - 0.5;
             // z -= type * 0.5 + 0.1;
 
             gl_FragColor = vec4(x, 0.0, z, 1.0);
@@ -146,10 +146,10 @@
             vec3 velocity = texture2D(previousVelocities, uv).xyz;
             vec3 current = texture2D(velocityField, position.xz).xyz;
 
-            velocity.x -= current.x / 1000.0;
-            velocity.z -= current.z / 1000.0;
+            velocity.x -= current.x / 2500.0;
+            velocity.z -= current.z / 2500.0;
 
-            velocity *= 0.8;
+            velocity *= 0.95;
 
             gl_FragColor = vec4(velocity, 1.0);
           }
