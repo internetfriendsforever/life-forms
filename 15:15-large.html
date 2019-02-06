@@ -1,0 +1,285 @@
+<script src='https://unpkg.com/regl@1.3.11/dist/regl.js'></script>
+<script src='https://unpkg.com/regl@1.3.11/dist/regl.js'></script>
+
+<script type='module'>
+  import standalone from 'https://cdn.jsdelivr.net/npm/permutable@0.1.14/dist/esm.js'
+  import { mat4 } from 'https://unpkg.com/gl-matrix@3.0.0/esm/index.js'
+
+  standalone({
+    async setup (canvas) {
+      canvas.width = 439 * 3
+      canvas.height = 908 * 3
+
+      canvas.style.width = ''
+      canvas.style.height = ''
+
+      const regl = createREGL({
+        extensions: ['OES_texture_float'],
+        canvas
+      })
+
+      const simplex3d = await fetch('./simplex3d.glsl').then(res => res.text())
+
+      const typeImage = await loadImage('./type-lepo-45.svg')
+
+      typeImage.width = canvas.width
+      typeImage.height = canvas.height
+
+      const typeTexture = regl.texture(typeImage)
+
+      const velocityFieldFramebuffer = regl.framebuffer({
+        depthStencil: false,
+        color: regl.texture({
+          type: 'float',
+          format: 'rgb',
+          width: canvas.width,
+          height: canvas.height
+        })
+      })
+
+      const count = 500000
+      const squared = Math.ceil(Math.sqrt(count))
+      const [cols, rows] = [squared, squared]
+
+      const buffer = regl.buffer(times(cols, col => times(rows, row => [col, row])))
+
+      const createFramebuffer = data => regl.framebuffer({
+        depthStencil: false,
+        color: regl.texture({
+          type: 'float',
+          format: 'rgb',
+          data
+        })
+      })
+
+      const createPingPong = data => [
+        createFramebuffer(data),
+        createFramebuffer(data)
+      ]
+
+      const positions = createPingPong(times(cols, () => times(rows, () => [
+        Math.random(),
+        0.5,
+        Math.random()
+      ])))
+
+      const velocities = createPingPong(times(cols, () => times(rows, () => [
+        0,
+        0,
+        0
+      ])))
+
+      const current = states => ({ tick }) => states[tick % 2]
+      const previous = states => ({ tick }) => states[(tick + 1) % 2]
+
+      const quad = {
+        vert: `
+          precision mediump float;
+          attribute vec2 position;
+          varying vec2 uv;
+
+          void main () {
+            uv = position;
+            gl_Position = vec4(position * 2.0 - 1.0, 0, 1);
+          }
+        `,
+
+        attributes: {
+          position: [
+            [0, 0],
+            [0, 1],
+            [1, 1],
+            [1, 0]
+          ]
+        },
+
+        elements: [
+          [0, 1, 2],
+          [2, 3, 0]
+        ]
+      }
+
+      const updateVelocityField = regl({
+        ...quad,
+
+        frag: `
+          precision mediump float;
+          varying vec2 uv;
+          uniform float time;
+          uniform sampler2D typeTexture;
+          uniform float aspect;
+
+          ${simplex3d}
+
+          void main () {
+            float type = texture2D(typeTexture, uv).r;
+
+            // vec2 scaledUv = uv * 15.0 * (5.0 * type + 1.0);
+            vec2 scaledUv = uv * vec2(aspect, 1.0) * 10.0 / (1.0 * type + 0.1);
+
+            float x = simplex3d(vec3(scaledUv, time / 10.0));
+            float z = simplex3d(vec3(scaledUv + vec2(2.0, 0.0), time / 10.0));
+
+            x *= (type * 0.5 + 0.5);
+            z *= (type * 0.5 + 0.5);
+
+            x -= type * 0.5 + 0.1;
+            // z -= type * 0.5 + 0.1;
+
+            gl_FragColor = vec4(x, 0.0, z, 1.0);
+          }
+        `,
+
+        uniforms: {
+          time: regl.context('time'),
+          typeTexture: typeTexture,
+          aspect: ({ viewportWidth, viewportHeight }) => viewportWidth / viewportHeight
+        },
+
+        framebuffer: velocityFieldFramebuffer
+      })
+
+      const updateVelocities = regl({
+        ...quad,
+
+        frag: `
+          precision mediump float;
+          varying vec2 uv;
+          uniform sampler2D velocityField;
+          uniform sampler2D previousPositions;
+          uniform sampler2D previousVelocities;
+
+          void main () {
+            vec3 position = texture2D(previousPositions, uv).xyz;
+            vec3 velocity = texture2D(previousVelocities, uv).xyz;
+            vec3 current = texture2D(velocityField, position.xz).xyz;
+
+            velocity.x -= current.x / 10000.0;
+            velocity.z -= current.z / 10000.0;
+
+            velocity *= 0.98;
+
+            gl_FragColor = vec4(velocity, 1.0);
+          }
+        `,
+
+        framebuffer: current(velocities),
+
+        uniforms: {
+          velocityField: velocityFieldFramebuffer,
+          previousPositions: previous(positions),
+          previousVelocities: previous(velocities)
+        }
+      })
+
+      const updatePositions = regl({
+        ...quad,
+
+        frag: `
+          precision mediump float;
+          varying vec2 uv;
+          uniform sampler2D previousPositions;
+          uniform sampler2D currentVelocities;
+          uniform sampler2D typeTexture;
+
+          void main () {
+            vec3 position = texture2D(previousPositions, uv).xyz;
+            vec3 velocity = texture2D(currentVelocities, uv).xyz;
+            float type = texture2D(typeTexture, position.xz).r;
+
+            position += velocity * (type + 0.1);
+
+            position.xz = position.xz - 1.0 * floor(position.xz / 1.0);
+
+            gl_FragColor = vec4(position, 1.0);
+          }
+        `,
+
+        framebuffer: current(positions),
+
+        uniforms: {
+          typeTexture: typeTexture,
+          previousPositions: previous(positions),
+          currentVelocities: previous(velocities)
+        }
+      })
+
+      const draw = regl({
+        vert: `
+          precision mediump float;
+          attribute vec2 index;
+          uniform vec2 dimensions;
+          uniform sampler2D currentPositions;
+          uniform mat4 view, projection;
+
+          void main () {
+            vec2 sample = index / dimensions;
+            vec3 position = texture2D(currentPositions, sample).xyz;
+
+            gl_PointSize = 3.0;
+            gl_Position = projection * view * vec4(position * 2.0 - 1.0, 1.0);
+          }
+        `,
+
+        frag: `
+          void main () {
+            gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+          }
+        `,
+
+        attributes: {
+          index: buffer
+        },
+
+        uniforms: {
+          dimensions: [cols, rows],
+          currentPositions: current(positions),
+          view: ({ time }) => {
+            return mat4.lookAt([], [0, 2.4, 0], [0, 0, 0], [0, 0, -1])
+            // return mat4.lookAt([], [0, (time * time) / 200, 0], [0, 0, 0], [0, 0, -1])
+          },
+          projection: ({viewportWidth, viewportHeight}) => {
+            return mat4.perspective([], Math.PI / 4, 1, 0.01, 1000)
+          },
+        },
+
+        count: count,
+
+        primitive: 'points'
+      })
+
+      let frameRequest
+
+      return function render (params) {
+        regl.poll()
+
+        updateVelocityField()
+        updateVelocities()
+        updatePositions()
+
+        regl.clear({
+          color: [0, 0, 0, 1],
+          depth: 1
+        })
+
+        draw()
+
+        window.cancelAnimationFrame(frameRequest)
+        window.requestAnimationFrame(time => render(params))
+      }
+    }
+  })
+
+  function loadImage (src) {
+    return new Promise((resolve, reject) => {
+      const image = new Image()
+      image.src = src
+      image.addEventListener('load', () => resolve(image))
+      image.addEventListener('error', reject)
+    })
+  }
+
+  function times (n, fn = i => i) {
+    return Array(n).fill().map((n, i) => fn(i))
+  }
+</script>
