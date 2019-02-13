@@ -61,10 +61,10 @@ Promise.all([
       color: regl.texture({
         type: 'float',
         format: 'rgb',
-        width: 1024,
-        height: 1024,
-        wrapS: 'mirror',
-        wrapT: 'mirror'
+        width: 64,
+        height: 64,
+        wrapS: 'repeat',
+        wrapT: 'repeat'
       })
     })
   )
