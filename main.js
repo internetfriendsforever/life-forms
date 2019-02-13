@@ -1,8 +1,20 @@
+const params = {
+  debugField: false
+}
+
+window.addEventListener('keydown', e => {
+  console.log(e.keyCode)
+
+  if (e.keyCode === 68) { // key: d
+    params.debugField = !params.debugField
+  }
+})
+
 Promise.all([
-  window.fetch('./lib/simplex2d.glsl').then(res => res.text()),
+  window.fetch('./lib/cellular2D.glsl').then(res => res.text()),
   loadImage('./assets/life-forms.svg')
 ]).then(([
-  simplex2d,
+  cellular2D,
   typeImage
 ]) => {
   const regl = window.createREGL({
@@ -26,8 +38,10 @@ Promise.all([
       color: regl.texture({
         type: 'float',
         format: 'rgb',
-        width: width,
-        height: height
+        width: 1024,
+        height: 1024,
+        wrapS: 'mirror',
+        wrapT: 'mirror'
       })
     })
   )
@@ -54,31 +68,32 @@ Promise.all([
     )
   )
 
-  const createFramebuffer = data => regl.framebuffer({
-    depthStencil: false,
-    color: regl.texture({
-      type: 'float',
-      format: 'rgb',
-      data
+  const createPingPong = data => times(2, () =>
+    regl.framebuffer({
+      depthStencil: false,
+      color: regl.texture({
+        type: 'float',
+        format: 'rgb',
+        data
+      })
     })
-  })
+  )
 
-  const createPingPong = data => [
-    createFramebuffer(data),
-    createFramebuffer(data)
-  ]
+  const positions = createPingPong(
+    times(cols, () =>
+      times(rows, () =>
+        [Math.random(), Math.random(), 0]
+      )
+    )
+  )
 
-  const positions = createPingPong(times(cols, () => times(rows, () => [
-    Math.random(),
-    Math.random(),
-    0
-  ])))
-
-  const velocities = createPingPong(times(cols, () => times(rows, () => [
-    0,
-    0,
-    0
-  ])))
+  const velocities = createPingPong(
+    times(cols, () =>
+      times(rows, () =>
+        [0, 0, 0]
+      )
+    )
+  )
 
   const current = states => ({ tick }) => states[tick % 2]
   const previous = states => ({ tick }) => states[(tick + 1) % 2]
@@ -116,71 +131,77 @@ Promise.all([
     frag: `
       precision mediump float;
       varying vec2 uv;
-      uniform sampler2D typeTexture;
       uniform float aspect;
       uniform float scale;
       uniform float seed;
+      uniform vec2 direction;
 
-      const int layers = 4;
-
-      ${simplex2d}
-
-      vec2 createLayer (vec2 uv, float scale, float seed, float aspect) {
-        vec2 sample = uv * scale * vec2(aspect, 1.0) + vec2(seed * 1000.0, 0);
-
-        return vec2(
-          simplex2d(sample),
-          simplex2d(sample + vec2(seed * 100.0, 0.0))
-        );
-      }
-
-      vec2 createNoise (vec2 uv, float scale, float seed, float aspect) {
-        vec2 noise = createLayer(uv, scale, seed, aspect);
-
-        noise += createLayer(uv, scale / 10.0, seed, aspect) * 0.2;
-        noise += createLayer(uv, scale / 5.0, seed, aspect) * 0.5;
-        noise += createLayer(uv, scale * 5.0, seed, aspect) * 0.1;
-        noise += createLayer(uv, scale * 10.0, seed, aspect) * 0.1;
-        noise += createLayer(uv, scale * 100.0, seed, aspect) * 0.05;
-
-        // noise /= 5.0;
-
-        return noise;
-      }
+      ${cellular2D}
 
       void main () {
-        // float type = 1.0 - texture2D(typeTexture, uv).a;
-        // vec2 scaledUv = uv * 15.0 * (5.0 * type + 1.0);
-        // vec2 scaledUv = uv * vec2(aspect, 1.0) * 20.0 * (7.0 * type + 0.1);
-        // vec2 scaledUv = uv * vec2(aspect, 1.0) * 4.0 / (1.03 - type);
+        vec2 noise;
+        vec2 sample = uv * scale * vec2(aspect, 1.0) + vec2(seed * 1000.0, 0);
 
-        // vec2 field = noise(sample, scale, seed, aspect);
-        //
-        // field += createField(sample / 10.0, scale, seed, aspect);
-        // field += createField(sample / 5.0, scale, seed, aspect);
-        // field += createField(sample / 2.0, scale, seed, aspect);
-        // field += createField(sample * 2.0, scale, seed, aspect);
-        // field += createField(sample * 5.0, scale, seed, aspect);
-        // field += createField(sample * 10.0, scale, seed, aspect);
-        //
-        // field /= 8.0;
-
-        // field.x /= (type * 0.5 + 0.5);
-        // field.y /= (type * 0.5 + 0.5);
-        // field.x -= ((1.0 - type) * 0.5 + 0.1);
-        // z -= type * 0.5 + 0.1;
-
-        vec2 noise = createNoise(uv, scale, seed, aspect);
+        noise += cellular2D(sample);
+        noise.x -= 0.4;
+        noise.y -= 0.4;
+        // noise += direction;
 
         gl_FragColor = vec4(noise, 0.0, 1.0);
       }
     `,
 
     uniforms: {
-      typeTexture: typeTexture,
-      aspect: ({ viewportWidth, viewportHeight }) => viewportWidth / viewportHeight,
+      aspect: width / height,
       scale: regl.prop('scale'),
-      seed: regl.prop('seed')
+      seed: regl.prop('seed'),
+      direction: regl.prop('direction')
+    }
+  })
+
+  const drawField = regl({
+    ...quad,
+
+    frag: `
+      precision mediump float;
+      varying vec2 uv;
+      uniform float time;
+      uniform sampler2D typeTexture;
+      uniform sampler2D spaceField;
+      uniform sampler2D typeField;
+
+      void main () {
+        float flowMix = 1.01 - (1.0 / time);
+        float stencilMix = 0.5;
+
+        float stencilA = mix(1.0, texture2D(typeTexture, uv).a, stencilMix);
+        float stencilB = 1.0 - stencilA;
+
+        vec2 spaceFlow = vec2(
+          texture2D(spaceField, uv + sin(time / 80.0)).x,
+          texture2D(spaceField, uv + cos(time / 30.0)).y
+        );
+
+        vec2 typeFlow = vec2(
+          texture2D(typeField, uv + sin(time / 50.0)).x,
+          texture2D(typeField, uv + cos(time / 60.0)).y
+        );
+
+        vec2 color = mix(
+          spaceFlow * stencilA,
+          typeFlow * stencilB,
+          flowMix
+        );
+
+        gl_FragColor = vec4(color, 0.0, 1.0);
+      }
+    `,
+
+    uniforms: {
+      time: regl.context('time'),
+      typeTexture: typeTexture,
+      spaceField: noiseFramebuffers[0],
+      typeField: noiseFramebuffers[1]
     }
   })
 
@@ -199,8 +220,8 @@ Promise.all([
         vec3 velocity = texture2D(previousVelocities, uv).xyz;
         vec3 field = texture2D(velocityField, position.xy).xyz;
 
-        velocity -= field / 2000.0;
-        velocity *= 0.92;
+        velocity += field / 1000.0;
+        velocity *= 0.8;
 
         gl_FragColor = vec4(velocity, 1.0);
       }
@@ -223,16 +244,12 @@ Promise.all([
       varying vec2 uv;
       uniform sampler2D previousPositions;
       uniform sampler2D currentVelocities;
-      uniform sampler2D typeTexture;
 
       void main () {
         vec3 position = texture2D(previousPositions, uv).xyz;
         vec3 velocity = texture2D(currentVelocities, uv).xyz;
-        float type = texture2D(typeTexture, position.xy).a;
 
-        // position += velocity / (type + 0.01);
         position += velocity;
-
         position.xy = position.xy - 1.0 * floor(position.xy / 1.0);
 
         gl_FragColor = vec4(position, 1.0);
@@ -242,7 +259,6 @@ Promise.all([
     framebuffer: current(positions),
 
     uniforms: {
-      typeTexture: typeTexture,
       previousPositions: previous(positions),
       currentVelocities: previous(velocities)
     }
@@ -284,26 +300,37 @@ Promise.all([
     primitive: 'points'
   })
 
-  // noiseFramebuffers[0].use(() => {
+  noiseFramebuffers[0].use(() => {
     drawNoise({
-      scale: 10,
-      seed: Math.random()
+      scale: 20,
+      seed: Math.random(),
+      direction: [0, 0]
     })
-  // })
+  })
 
-  // noiseFramebuffers[1].use(() => {
-  //   drawNoise()
-  // })
+  noiseFramebuffers[1].use(() => {
+    drawNoise({
+      scale: 5,
+      seed: Math.random(),
+      direction: [0, 0]
+    })
+  })
 
-  // regl.frame(() => {
-  //   updateVelocities()
-  //   updatePositions()
-  //
-  //   regl.clear({
-  //     color: [0, 0, 0, 1],
-  //     depth: 1
-  //   })
-  //
-  //   draw()
-  // })
+  regl.frame(() => {
+    if (params.debugField) {
+      return drawField()
+    }
+
+    fieldFramebuffer.use(() => drawField())
+
+    updateVelocities()
+    updatePositions()
+
+    regl.clear({
+      color: [0, 0, 0, 1],
+      depth: 1
+    })
+
+    draw()
+  })
 })
