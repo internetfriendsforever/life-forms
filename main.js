@@ -372,7 +372,8 @@ Promise.all([
       void main () {
         vec3 color = texture2D(texture, uv).rgb;
 
-        color += texture2D(previous, uv).rgb * 0.97;
+        color += texture2D(previous, uv).rgb;
+        color -= 0.01;
 
         gl_FragColor = vec4(color, 1.0);
       }
