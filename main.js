@@ -20,7 +20,19 @@ Promise.all([
     flipY: true
   })
 
-  const velocityFieldFramebuffer = regl.framebuffer({
+  const noiseFramebuffers = times(2, () =>
+    regl.framebuffer({
+      depthStencil: false,
+      color: regl.texture({
+        type: 'float',
+        format: 'rgb',
+        width: width,
+        height: height
+      })
+    })
+  )
+
+  const fieldFramebuffer = regl.framebuffer({
     depthStencil: false,
     color: regl.texture({
       type: 'float',
@@ -98,57 +110,77 @@ Promise.all([
     ]
   }
 
-  const updateVelocityField = regl({
+  const drawNoise = regl({
     ...quad,
 
     frag: `
       precision mediump float;
       varying vec2 uv;
-      uniform float time;
       uniform sampler2D typeTexture;
       uniform float aspect;
+      uniform float scale;
+      uniform float seed;
+
+      const int layers = 4;
 
       ${simplex2d}
 
-      vec2 createField (vec2 uv) {
+      vec2 createLayer (vec2 uv, float scale, float seed, float aspect) {
+        vec2 sample = uv * scale * vec2(aspect, 1.0) + vec2(seed * 1000.0, 0);
+
         return vec2(
-          simplex2d(uv),
-          simplex2d(uv + vec2(2.0, 0.0))
+          simplex2d(sample),
+          simplex2d(sample + vec2(seed * 100.0, 0.0))
         );
       }
 
-      void main () {
-        float type = 1.0 - texture2D(typeTexture, uv).a;
+      vec2 createNoise (vec2 uv, float scale, float seed, float aspect) {
+        vec2 noise = createLayer(uv, scale, seed, aspect);
 
+        noise += createLayer(uv, scale / 10.0, seed, aspect) * 0.2;
+        noise += createLayer(uv, scale / 5.0, seed, aspect) * 0.5;
+        noise += createLayer(uv, scale * 5.0, seed, aspect) * 0.1;
+        noise += createLayer(uv, scale * 10.0, seed, aspect) * 0.1;
+        noise += createLayer(uv, scale * 100.0, seed, aspect) * 0.05;
+
+        // noise /= 5.0;
+
+        return noise;
+      }
+
+      void main () {
+        // float type = 1.0 - texture2D(typeTexture, uv).a;
         // vec2 scaledUv = uv * 15.0 * (5.0 * type + 1.0);
         // vec2 scaledUv = uv * vec2(aspect, 1.0) * 20.0 * (7.0 * type + 0.1);
-        vec2 scaledUv = uv * vec2(aspect, 1.0) * 4.0 / (1.03 - type);
+        // vec2 scaledUv = uv * vec2(aspect, 1.0) * 4.0 / (1.03 - type);
 
-        vec2 field = createField(vec2(scaledUv));
+        // vec2 field = noise(sample, scale, seed, aspect);
+        //
+        // field += createField(sample / 10.0, scale, seed, aspect);
+        // field += createField(sample / 5.0, scale, seed, aspect);
+        // field += createField(sample / 2.0, scale, seed, aspect);
+        // field += createField(sample * 2.0, scale, seed, aspect);
+        // field += createField(sample * 5.0, scale, seed, aspect);
+        // field += createField(sample * 10.0, scale, seed, aspect);
+        //
+        // field /= 8.0;
 
-        field += createField(vec2(scaledUv / 10.0));
-        field += createField(vec2(scaledUv / 5.0));
-        field += createField(vec2(scaledUv / 2.0));
-        field += createField(vec2(scaledUv * 2.0));
-        field += createField(vec2(scaledUv * 5.0));
-        field += createField(vec2(scaledUv * 10.0));
-
-        field /= 8.0;
-
-        field.x /= (type * 0.5 + 0.5);
-        field.y /= (type * 0.5 + 0.5);
-
+        // field.x /= (type * 0.5 + 0.5);
+        // field.y /= (type * 0.5 + 0.5);
         // field.x -= ((1.0 - type) * 0.5 + 0.1);
         // z -= type * 0.5 + 0.1;
 
-        gl_FragColor = vec4(field, 0.0, 1.0);
+        vec2 noise = createNoise(uv, scale, seed, aspect);
+
+        gl_FragColor = vec4(noise, 0.0, 1.0);
       }
     `,
 
     uniforms: {
-      time: regl.context('time'),
       typeTexture: typeTexture,
-      aspect: ({ viewportWidth, viewportHeight }) => viewportWidth / viewportHeight
+      aspect: ({ viewportWidth, viewportHeight }) => viewportWidth / viewportHeight,
+      scale: regl.prop('scale'),
+      seed: regl.prop('seed')
     }
   })
 
@@ -177,7 +209,7 @@ Promise.all([
     framebuffer: current(velocities),
 
     uniforms: {
-      velocityField: velocityFieldFramebuffer,
+      velocityField: fieldFramebuffer,
       previousPositions: previous(positions),
       previousVelocities: previous(velocities)
     }
@@ -252,19 +284,26 @@ Promise.all([
     primitive: 'points'
   })
 
-  velocityFieldFramebuffer.use(() => {
-    updateVelocityField()
-  })
-
-  regl.frame(() => {
-    updateVelocities()
-    updatePositions()
-
-    regl.clear({
-      color: [0, 0, 0, 1],
-      depth: 1
+  // noiseFramebuffers[0].use(() => {
+    drawNoise({
+      scale: 10,
+      seed: Math.random()
     })
+  // })
 
-    draw()
-  })
+  // noiseFramebuffers[1].use(() => {
+  //   drawNoise()
+  // })
+
+  // regl.frame(() => {
+  //   updateVelocities()
+  //   updatePositions()
+  //
+  //   regl.clear({
+  //     color: [0, 0, 0, 1],
+  //     depth: 1
+  //   })
+  //
+  //   draw()
+  // })
 })
