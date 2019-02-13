@@ -1,15 +1,16 @@
-run()
-
-async function run () {
+Promise.all([
+  window.fetch('./lib/simplex2d.glsl').then(res => res.text()),
+  loadImage('./assets/life-forms.svg')
+]).then(([
+  simplex2d,
+  typeImage
+]) => {
   const regl = window.createREGL({
     extensions: ['OES_texture_float']
   })
 
   const width = window.innerWidth
   const height = window.innerHeight
-
-  const simplex2d = await window.fetch('./lib/simplex2d.glsl').then(res => res.text())
-  const typeImage = await loadImage('./assets/life-forms.svg')
 
   typeImage.width = width
   typeImage.height = height
@@ -33,7 +34,13 @@ async function run () {
   const squared = Math.ceil(Math.sqrt(count))
   const [cols, rows] = [squared, squared]
 
-  const buffer = regl.buffer(times(cols, col => times(rows, row => [col, row])))
+  const buffer = regl.buffer(
+    times(cols, col =>
+      times(rows, row =>
+        [col, row]
+      )
+    )
+  )
 
   const createFramebuffer = data => regl.framebuffer({
     depthStencil: false,
@@ -260,17 +267,4 @@ async function run () {
 
     draw()
   })
-}
-
-function loadImage (src) {
-  return new Promise((resolve, reject) => {
-    const image = new window.Image()
-    image.src = src
-    image.addEventListener('load', () => resolve(image))
-    image.addEventListener('error', reject)
-  })
-}
-
-function times (n, fn = i => i) {
-  return Array(n).fill().map((n, i) => fn(i))
-}
+})
