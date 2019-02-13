@@ -21,8 +21,8 @@ Promise.all([
     extensions: ['OES_texture_float']
   })
 
-  const width = window.innerWidth
-  const height = window.innerHeight
+  const width = window.innerWidth * window.devicePixelRatio
+  const height = window.innerHeight * window.devicePixelRatio
 
   const typeCanvas = document.createElement('canvas')
   const typeContext = typeCanvas.getContext('2d')
@@ -50,6 +50,24 @@ Promise.all([
   typeContext.translate(typeCanvas.width / 2, typeCanvas.height / 2)
   typeContext.drawImage(typeImage, -typeWidth / 2, -typeHeight / 2, typeWidth, typeHeight)
 
+  const drawFramebuffer = regl.framebuffer({
+    depthStencil: false,
+    color: regl.texture({
+      width: width,
+      height: height
+    })
+  })
+
+  const outputFramebuffers = times(2, () =>
+    regl.framebuffer({
+      depthStencil: false,
+      color: regl.texture({
+        width: width,
+        height: height
+      })
+    })
+  )
+
   const typeTexture = regl.texture({
     data: typeCanvas,
     flipY: true
@@ -61,10 +79,10 @@ Promise.all([
       color: regl.texture({
         type: 'float',
         format: 'rgb',
-        width: 64,
-        height: 64,
-        wrapS: 'repeat',
-        wrapT: 'repeat'
+        width: 256,
+        height: 256,
+        wrapS: 'mirror',
+        wrapT: 'mirror'
       })
     })
   )
@@ -299,7 +317,7 @@ Promise.all([
         vec2 sample = index / dimensions;
         vec3 position = texture2D(currentPositions, sample).xyz;
 
-        gl_PointSize = 4.0;
+        gl_PointSize = 1.0;
         gl_Position = vec4(position * 2.0 - 1.0, 1.0);
       }
     `,
@@ -321,7 +339,9 @@ Promise.all([
 
     count: count,
 
-    primitive: 'points'
+    primitive: 'points',
+
+    framebuffer: drawFramebuffer
   })
 
   noiseFramebuffers[0].use(() => {
@@ -340,7 +360,34 @@ Promise.all([
     })
   })
 
-  regl.frame(() => {
+  const output = regl({
+    ...quad,
+
+    frag: `
+      precision mediump float;
+      varying vec2 uv;
+      uniform sampler2D texture;
+      uniform sampler2D previous;
+
+      void main () {
+        vec3 color = texture2D(texture, uv).rgb;
+
+        color += texture2D(previous, uv).rgb * 0.97;
+
+        gl_FragColor = vec4(color, 1.0);
+      }
+    `,
+
+    uniforms: {
+      texture: drawFramebuffer,
+      previous: regl.prop('previous')
+    }
+  })
+
+  const currentOutputBuffer = current(outputFramebuffers)
+  const previousOutputBuffer = previous(outputFramebuffers)
+
+  regl.frame(context => {
     if (params.debugField) {
       return drawField()
     }
@@ -350,11 +397,29 @@ Promise.all([
     updateVelocities()
     updatePositions()
 
+    drawFramebuffer.use(() => {
+      regl.clear({
+        color: [0, 0, 0, 1],
+        depth: 0
+      })
+
+      draw()
+    })
+
     regl.clear({
       color: [0, 0, 0, 1],
       depth: 1
     })
 
-    draw()
+    currentOutputBuffer(context).use(() => {
+      output({
+        previous: previousOutputBuffer(context)
+      })
+    })
+
+    output({
+      texture: currentOutputBuffer(context),
+      previous: previousOutputBuffer(context)
+    })
   })
 })
