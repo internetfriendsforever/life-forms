@@ -12,7 +12,7 @@ window.addEventListener('keydown', e => {
 
 Promise.all([
   window.fetch('./lib/cellular2D.glsl').then(res => res.text()),
-  loadImage('./assets/life-forms.svg')
+  loadImage('./assets/lebens-formen.svg')
 ]).then(([
   cellular2D,
   typeImage
@@ -24,11 +24,34 @@ Promise.all([
   const width = window.innerWidth
   const height = window.innerHeight
 
-  typeImage.width = width
-  typeImage.height = height
+  const typeCanvas = document.createElement('canvas')
+  const typeContext = typeCanvas.getContext('2d')
+
+  typeCanvas.width = width
+  typeCanvas.height = height
+
+  const typeSize = 0.9
+  const typeRatio = typeImage.width / typeImage.height
+  const canvasRatio = typeCanvas.width / typeCanvas.height
+
+  let typeWidth, typeHeight
+
+  if (typeRatio > canvasRatio) {
+    typeWidth = typeCanvas.width
+    typeHeight = typeImage.height * (typeWidth / typeImage.width)
+  } else {
+    typeHeight = typeCanvas.height
+    typeWidth = typeCanvas.width * (typeHeight / typeImage.height)
+  }
+
+  typeWidth *= typeSize
+  typeHeight *= typeSize
+
+  typeContext.translate(typeCanvas.width / 2, typeCanvas.height / 2)
+  typeContext.drawImage(typeImage, -typeWidth / 2, -typeHeight / 2, typeWidth, typeHeight)
 
   const typeTexture = regl.texture({
-    data: typeImage,
+    data: typeCanvas,
     flipY: true
   })
 
@@ -144,7 +167,7 @@ Promise.all([
 
         noise += cellular2D(sample);
         noise.x -= 0.4;
-        noise.y -= 0.4;
+        noise.y -= 0.7;
         // noise += direction;
 
         gl_FragColor = vec4(noise, 0.0, 1.0);
@@ -171,10 +194,11 @@ Promise.all([
       uniform sampler2D typeField;
 
       void main () {
-        float flowMix = 1.01 - (1.0 / time);
+        // float flowMix = 1.0;
+        float flowMix = 1.0 - (1.1 / (time * 2.0));
         float stencilMix = 0.5;
 
-        float stencilA = mix(1.0, texture2D(typeTexture, uv).a, stencilMix);
+        float stencilA = mix(1.0, pow(texture2D(typeTexture, uv).a, 100.0), stencilMix);
         float stencilB = 1.0 - stencilA;
 
         vec2 spaceFlow = vec2(
@@ -220,7 +244,7 @@ Promise.all([
         vec3 velocity = texture2D(previousVelocities, uv).xyz;
         vec3 field = texture2D(velocityField, position.xy).xyz;
 
-        velocity += field / 1000.0;
+        velocity += field / 2000.0;
         velocity *= 0.8;
 
         gl_FragColor = vec4(velocity, 1.0);
@@ -275,7 +299,7 @@ Promise.all([
         vec2 sample = index / dimensions;
         vec3 position = texture2D(currentPositions, sample).xyz;
 
-        gl_PointSize = 3.0;
+        gl_PointSize = 4.0;
         gl_Position = vec4(position * 2.0 - 1.0, 1.0);
       }
     `,
@@ -302,7 +326,7 @@ Promise.all([
 
   noiseFramebuffers[0].use(() => {
     drawNoise({
-      scale: 20,
+      scale: 12,
       seed: Math.random(),
       direction: [0, 0]
     })
@@ -310,7 +334,7 @@ Promise.all([
 
   noiseFramebuffers[1].use(() => {
     drawNoise({
-      scale: 5,
+      scale: 7,
       seed: Math.random(),
       direction: [0, 0]
     })
