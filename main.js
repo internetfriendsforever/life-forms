@@ -35,7 +35,7 @@ Promise.all([
   typeCanvas.width = width
   typeCanvas.height = height
 
-  const typeSize = 0.8
+  const typeSize = 0.95
   const typeRatio = typeImage.width / typeImage.height
   const canvasRatio = typeCanvas.width / typeCanvas.height
 
@@ -100,7 +100,7 @@ Promise.all([
     })
   })
 
-  const count = 5000
+  const count = 100
   const squared = Math.ceil(Math.sqrt(count))
   const [cols, rows] = [squared, squared]
 
@@ -344,8 +344,10 @@ Promise.all([
 
       void main () {
         vec2 unit = vec2(1.0) / dimensions;
-        vec3 color = texture2D(texture, uv).rgb;
+        // vec3 color = texture2D(texture, uv).rgb;
         float type = texture2D(typeTexture, uv).a;
+
+        vec3 color;
 
         if (type > 0.0) {
           float neighbors = 0.0;
@@ -358,20 +360,22 @@ Promise.all([
                   float(dx) * unit.x,
                   float(dy) * unit.y
                 )
-              ).r;
+              ).r > 0.1 ? 1.0 : 0.0;
             }
           }
 
-          float self = texture2D(previous, uv).r;
+          float self = texture2D(texture, uv).r;
 
           if (neighbors <= 3.0 + self && neighbors >= 3.0) {
             // color += vec3(1.0, 0.5, 0.4);
             color += 1.0;
           }
+
+          color += self;
         }
 
-        // color += texture2D(previous, uv).rgb;
-        // color -= 0.05;
+        color += texture2D(previous, uv).rgb;
+        color -= 0.005;
 
         gl_FragColor = vec4(color, 1.0);
       }
