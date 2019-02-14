@@ -30,7 +30,7 @@ Promise.all([
   typeCanvas.width = width
   typeCanvas.height = height
 
-  const typeSize = 0.9
+  const typeSize = 0.7
   const typeRatio = typeImage.width / typeImage.height
   const canvasRatio = typeCanvas.width / typeCanvas.height
 
@@ -186,7 +186,7 @@ Promise.all([
         noise += cellular2D(sample);
         noise.x -= 0.4;
         noise.y -= 0.7;
-        // noise += direction;
+        noise += direction;
 
         gl_FragColor = vec4(noise, 0.0, 1.0);
       }
@@ -317,7 +317,7 @@ Promise.all([
         vec2 sample = index / dimensions;
         vec3 position = texture2D(currentPositions, sample).xyz;
 
-        gl_PointSize = 1.0;
+        gl_PointSize = 2.0;
         gl_Position = vec4(position * 2.0 - 1.0, 1.0);
       }
     `,
@@ -344,9 +344,54 @@ Promise.all([
     framebuffer: drawFramebuffer
   })
 
+  const output = regl({
+    ...quad,
+
+    frag: `
+      precision mediump float;
+      varying vec2 uv;
+      uniform sampler2D texture;
+      uniform sampler2D previous;
+      uniform vec2 dimensions;
+
+      void main () {
+        vec2 unit = vec2(1.0) / dimensions;
+        vec2 unitx = vec2(0.0, unit.x);
+        vec2 unity = vec2(unit.y, 0.0);
+
+        vec3 color;
+
+        color += texture2D(texture, uv).rgb / 4.0;
+
+        color += mix(
+          texture2D(previous, uv - unitx).rgb,
+          texture2D(previous, uv + unitx).rgb,
+          0.5
+        );
+
+        color += mix(
+          texture2D(previous, uv - unity).rgb,
+          texture2D(previous, uv + unity).rgb,
+          0.5
+        );
+
+        color /= 2.0;
+        color -= 0.0055;
+
+        gl_FragColor = vec4(color, 1.0);
+      }
+    `,
+
+    uniforms: {
+      dimensions: [width, height],
+      texture: drawFramebuffer,
+      previous: regl.prop('previous')
+    }
+  })
+
   noiseFramebuffers[0].use(() => {
     drawNoise({
-      scale: 12,
+      scale: 5,
       seed: Math.random(),
       direction: [0, 0]
     })
@@ -358,31 +403,6 @@ Promise.all([
       seed: Math.random(),
       direction: [0, 0]
     })
-  })
-
-  const output = regl({
-    ...quad,
-
-    frag: `
-      precision mediump float;
-      varying vec2 uv;
-      uniform sampler2D texture;
-      uniform sampler2D previous;
-
-      void main () {
-        vec3 color = texture2D(texture, uv).rgb;
-
-        color += texture2D(previous, uv).rgb;
-        color -= 0.01;
-
-        gl_FragColor = vec4(color, 1.0);
-      }
-    `,
-
-    uniforms: {
-      texture: drawFramebuffer,
-      previous: regl.prop('previous')
-    }
   })
 
   const currentOutputBuffer = current(outputFramebuffers)
