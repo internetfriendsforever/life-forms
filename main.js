@@ -12,7 +12,7 @@ window.addEventListener('keydown', e => {
 
 Promise.all([
   window.fetch('./lib/cellular2D.glsl').then(res => res.text()),
-  loadImage('./assets/lebens-formen.svg')
+  loadImage('./assets/life-forms.svg')
 ]).then(([
   cellular2D,
   typeImage
@@ -30,7 +30,7 @@ Promise.all([
   typeCanvas.width = width
   typeCanvas.height = height
 
-  const typeSize = 0.9
+  const typeSize = 0.75
   const typeRatio = typeImage.width / typeImage.height
   const canvasRatio = typeCanvas.width / typeCanvas.height
 
@@ -195,7 +195,7 @@ Promise.all([
 
       void main () {
         // float flowMix = 1.0;
-        float flowMix = 1.0 - (1.1 / (time * 2.0));
+        float flowMix = 1.1 - (1.0 / (time * 5.0));
         float stencilMix = 0.5;
 
         float stencilA = mix(1.0, pow(texture2D(typeTexture, uv).a, 100.0), stencilMix);
