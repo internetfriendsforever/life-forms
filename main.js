@@ -19,7 +19,7 @@ Promise.all([
 ]) => {
   const regl = window.createREGL({
     extensions: ['OES_texture_float'],
-    pixelRatio: 0.5
+    pixelRatio: 1
   })
 
   const canvas = document.querySelector('canvas')
@@ -35,7 +35,7 @@ Promise.all([
   typeCanvas.width = width
   typeCanvas.height = height
 
-  const typeSize = 0.95
+  const typeSize = 0.9
   const typeRatio = typeImage.width / typeImage.height
   const canvasRatio = typeCanvas.width / typeCanvas.height
 
@@ -375,7 +375,7 @@ Promise.all([
         }
 
         color += texture2D(previous, uv).rgb;
-        color -= 0.005;
+        color -= 0.0035;
 
         gl_FragColor = vec4(color, 1.0);
       }
