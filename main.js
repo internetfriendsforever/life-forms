@@ -19,7 +19,7 @@ Promise.all([
 ]) => {
   const regl = window.createREGL({
     extensions: ['OES_texture_float'],
-    pixelRatio: 0.5
+    pixelRatio: 1
   })
 
   const canvas = document.querySelector('canvas')
@@ -375,7 +375,7 @@ Promise.all([
         }
 
         color += texture2D(previous, uv).rgb;
-        color -= 0.005;
+        // color -= 0.005;
 
         gl_FragColor = vec4(color, 1.0);
       }
