@@ -7,8 +7,8 @@ loadImage('./assets/life-forms.svg').then(typeImage => {
     .map(parseFloat)
     .map(value => value / 255)
 
-  const background = colors[0] ? parseColors(0) : [0, 0, 0]
-  const foreground = colors[1] ? parseColors(1) : [1, 1, 1]
+  const foreground = colors[0] ? parseColors(0) : [1, 1, 1]
+  const background = colors[1] ? parseColors(1) : [0, 0, 0]
 
   console.log(background, foreground)
 
@@ -226,9 +226,9 @@ loadImage('./assets/life-forms.svg').then(typeImage => {
         vec3 color = texture2D(texture, uv).rgb;
 
         if (color.r > 0.0) {
-          gl_FragColor = vec4(background, 1.0);
-        } else {
           gl_FragColor = vec4(foreground, 1.0);
+        } else {
+          gl_FragColor = vec4(background, 1.0);
         }
       }
     `,
