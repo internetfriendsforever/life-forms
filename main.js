@@ -24,8 +24,6 @@ Promise.all([
 
   const canvas = document.querySelector('canvas')
 
-  canvas.style.imageRendering = 'pixelated'
-
   const { width, height } = canvas
 
   const typeCanvas = document.createElement('canvas')
@@ -81,7 +79,6 @@ Promise.all([
     depthStencil: false,
     color: regl.texture({
       type: 'float',
-      format: 'rgb',
       width: 256,
       height: 256,
       wrapS: 'mirror',
@@ -93,7 +90,6 @@ Promise.all([
     depthStencil: false,
     color: regl.texture({
       type: 'float',
-      format: 'rgb',
       width: width,
       height: height
     })
@@ -116,7 +112,6 @@ Promise.all([
       depthStencil: false,
       color: regl.texture({
         type: 'float',
-        format: 'rgb',
         data
       })
     })
@@ -125,7 +120,7 @@ Promise.all([
   const positions = createPingPong(
     times(cols, () =>
       times(rows, () =>
-        [Math.random(), Math.random(), 0]
+        [Math.random(), Math.random(), 0, 0]
       )
     )
   )
@@ -133,7 +128,7 @@ Promise.all([
   const velocities = createPingPong(
     times(cols, () =>
       times(rows, () =>
-        [0, 0, 0]
+        [0, 0, 0, 0]
       )
     )
   )
@@ -435,3 +430,16 @@ Promise.all([
     })
   })
 })
+
+function loadImage (src) {
+  return new Promise((resolve, reject) => {
+    const image = new window.Image()
+    image.src = src
+    image.addEventListener('load', () => resolve(image))
+    image.addEventListener('error', reject)
+  })
+}
+
+function times (n, fn = i => i) {
+  return Array(n).fill().map((n, i) => fn(i))
+}
