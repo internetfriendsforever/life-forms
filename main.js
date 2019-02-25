@@ -1,4 +1,17 @@
 loadImage('./assets/life-forms.svg').then(typeImage => {
+  const colors = window.location.hash.substring(1).split(';').filter(v => v)
+
+  const parseColors = i => colors[i]
+    .split(',')
+    .map(str => str.trim())
+    .map(parseFloat)
+    .map(value => value / 255)
+
+  const background = colors[0] ? parseColors(0) : [0, 0, 0]
+  const foreground = colors[1] ? parseColors(1) : [1, 1, 1]
+
+  console.log(background, foreground)
+
   const regl = window.createREGL({ pixelRatio: 1 })
 
   const canvas = document.querySelector('canvas')
@@ -39,7 +52,7 @@ loadImage('./assets/life-forms.svg').then(typeImage => {
     })
   })
 
-  const outputFramebuffers = times(2, () =>
+  const lifeFramebuffers = times(2, () =>
     regl.framebuffer({
       depthStencil: false,
       color: regl.texture({
@@ -122,7 +135,7 @@ loadImage('./assets/life-forms.svg').then(typeImage => {
     primitive: 'points'
   })
 
-  const output = regl({
+  const quad = {
     vert: `
       precision highp float;
       attribute vec2 position;
@@ -147,6 +160,10 @@ loadImage('./assets/life-forms.svg').then(typeImage => {
       [0, 1, 2],
       [2, 3, 0]
     ],
+  }
+
+  const life = regl({
+    ...quad,
 
     frag: `
       precision highp float;
@@ -195,8 +212,36 @@ loadImage('./assets/life-forms.svg').then(typeImage => {
     }
   })
 
-  const currentOutputBuffer = current(outputFramebuffers)
-  const previousOutputBuffer = previous(outputFramebuffers)
+  const output = regl({
+    ...quad,
+
+    frag: `
+      precision highp float;
+      varying vec2 uv;
+      uniform sampler2D texture;
+      uniform vec3 background;
+      uniform vec3 foreground;
+
+      void main () {
+        vec3 color = texture2D(texture, uv).rgb;
+
+        if (color.r > 0.0) {
+          gl_FragColor = vec4(background, 1.0);
+        } else {
+          gl_FragColor = vec4(foreground, 1.0);
+        }
+      }
+    `,
+
+    uniforms: {
+      texture: regl.prop('texture'),
+      background,
+      foreground
+    }
+  })
+
+  const currentLifeBuffer = current(lifeFramebuffers)
+  const previousLifeBuffer = previous(lifeFramebuffers)
 
   regl.frame(context => {
     drawFramebuffer.use(() => {
@@ -208,20 +253,14 @@ loadImage('./assets/life-forms.svg').then(typeImage => {
       draw()
     })
 
-    regl.clear({
-      color: [0, 0, 0, 1],
-      depth: 1
-    })
-
-    currentOutputBuffer(context).use(() => {
-      output({
-        previous: previousOutputBuffer(context)
+    currentLifeBuffer(context).use(() => {
+      life({
+        previous: previousLifeBuffer(context)
       })
     })
 
     output({
-      texture: currentOutputBuffer(context),
-      previous: previousOutputBuffer(context)
+      texture: currentLifeBuffer(context)
     })
   })
 
