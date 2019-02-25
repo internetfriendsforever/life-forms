@@ -99,7 +99,7 @@ Promise.all([
     })
   })
 
-  const count = 5000
+  const count = (width * height) / 30
   const squared = Math.ceil(Math.sqrt(count))
   const [cols, rows] = [squared, squared]
 
