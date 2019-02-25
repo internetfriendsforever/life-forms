@@ -2,6 +2,12 @@
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
+    body {
+      background-color: black;
+      background-size: cover;
+    }
+
+    body,
     canvas {
       image-rendering: -moz-crisp-edges;
       image-rendering: -webkit-crisp-edges;
@@ -13,4 +19,11 @@
 <body>
   <script src='lib/regl.js'></script>
   <script src='main.js'></script>
+  <script>
+    setTimeout(function() {
+      if (!window.running) {
+        document.body.style.backgroundImage = 'url(./assets/fallback.png)'
+      }
+    }, 1000)
+  </script>
 </body>

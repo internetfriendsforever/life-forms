@@ -429,6 +429,8 @@ Promise.all([
       previous: previousOutputBuffer(context)
     })
   })
+
+  window.running = true
 })
 
 function loadImage (src) {
