@@ -13,7 +13,6 @@ loadImage('./assets/life-forms.svg').then(typeImage => {
   console.log(background, foreground)
 
   const regl = window.createREGL({ pixelRatio: 1 })
-
   const canvas = document.querySelector('canvas')
 
   const { width, height } = canvas
@@ -67,40 +66,44 @@ loadImage('./assets/life-forms.svg').then(typeImage => {
     flipY: true
   })
 
-  const count = (width * height) / 80
-  const squared = Math.ceil(Math.sqrt(count))
-  const [cols, rows] = [squared, squared]
+  const count = (width * height) / 100
+  const positions = new Float32Array(count * 2)
+  const velocities = new Float32Array(count * 2)
 
-  const buffer = regl.buffer(
-    times(cols, col =>
-      times(rows, row => [
-        (Math.random() - 0.5) / width,
-        (Math.random() - 0.5) / height,
-        Math.random() * Math.PI * 2,
-        Math.random() * Math.PI * 2
-      ])
-    )
-  )
+  for (let i = 0; i < positions.length; i += 2) {
+    positions[i] = Math.random() - 0.5
+    positions[i + 1] = Math.random() - 0.5
+  }
 
-  const stride = 4 * (2 + 2)
+  const positionsBuffer = regl.buffer(positions)
 
-  const current = states => ({ tick }) => states[tick % 2]
-  const previous = states => ({ tick }) => states[(tick + 1) % 2]
+  const simplexA = new SimplexNoise(Math.random().toString())
+  const simplexB = new SimplexNoise(Math.random().toString())
+
+  const noiseSize = 1024
+  const noiseA = new Float32Array(noiseSize * noiseSize)
+  const noiseB = new Float32Array(noiseSize * noiseSize)
+
+  for (let i = 0; i < noiseA.length; i++) {
+    const scale = 30
+    const x = ((i % noiseSize) / noiseSize) * scale
+    const y = (((i / noiseSize) | 0) / noiseSize) * scale
+    noiseA[i] = simplexB.noise2D(x / 5, y / 5) / 10000 + 0.0001
+    noiseB[i] = simplexB.noise2D(x / 10, y / 10) / 10000
+  }
 
   const draw = regl({
     vert: `
       precision highp float;
-      attribute vec2 freq;
+      attribute vec2 position;
       attribute vec2 phase;
       uniform float time;
 
       void main () {
-        vec2 position = freq.xy * time + phase.xy;
-
-        position = position - 1.0 * floor(position / 1.0);
+        vec2 wrapped = position - 1.0 * floor(position / 1.0);
 
         gl_PointSize = 1.0;
-        gl_Position = vec4(position * 2.0 - 1.0, 0.0, 1.0);
+        gl_Position = vec4(wrapped * 2.0 - 1.0, 0.0, 1.0);
       }
     `,
 
@@ -113,17 +116,7 @@ loadImage('./assets/life-forms.svg').then(typeImage => {
     `,
 
     attributes: {
-      freq: {
-        buffer,
-        stride,
-        offset: 0
-      },
-
-      phase: {
-        buffer,
-        stride,
-        offset: 8
-      }
+      position: positionsBuffer
     },
 
     uniforms: {
@@ -240,10 +233,53 @@ loadImage('./assets/life-forms.svg').then(typeImage => {
     }
   })
 
+
+  const current = states => ({ tick }) => states[tick % 2]
+  const previous = states => ({ tick }) => states[(tick + 1) % 2]
+
   const currentLifeBuffer = current(lifeFramebuffers)
   const previousLifeBuffer = previous(lifeFramebuffers)
 
   regl.frame(context => {
+    const shiftA = Math.sin(context.time / 80)
+    const shiftB = Math.cos(context.time / 30)
+
+    for (let i = 0; i < positions.length; i += 2) {
+      const xIndex = i
+      const yIndex = i + 1
+
+      const xA = positions[xIndex] + shiftA
+      const yA = positions[yIndex] + shiftB
+      const wrappedXA = xA - 1 * Math.floor(xA / 1)
+      const wrappedYA = yA - 1 * Math.floor(yA / 1)
+      const scaledXA = Math.floor(wrappedXA * noiseSize)
+      const scaledYA = Math.floor(wrappedYA * noiseSize)
+
+      const xB = positions[xIndex] + shiftB
+      const yB = positions[yIndex] + shiftB
+      const wrappedXB = xB - 1 * Math.floor(xB / 1)
+      const wrappedYB = yB - 1 * Math.floor(yB / 1)
+      const scaledXB = Math.floor(wrappedXB * noiseSize)
+      const scaledYB = Math.floor(wrappedYB * noiseSize)
+
+      const noiseIndexA = scaledXA + scaledYA * noiseSize
+      const noiseIndexB = scaledXB + scaledYB * noiseSize
+
+      velocities[xIndex] += noiseA[noiseIndexA]
+      velocities[yIndex] += noiseB[noiseIndexB]
+
+      velocities[xIndex] += (Math.random() - 0.5) / 5000
+      velocities[yIndex] += (Math.random() - 0.5) / 5000
+
+      velocities[xIndex] *= 0.85
+      velocities[yIndex] *= 0.85
+
+      positions[xIndex] += velocities[xIndex]
+      positions[yIndex] += velocities[yIndex]
+    }
+
+    positionsBuffer.subdata(positions)
+
     drawFramebuffer.use(() => {
       regl.clear({
         color: [0, 0, 0, 1],
