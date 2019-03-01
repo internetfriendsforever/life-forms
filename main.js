@@ -1,18 +1,27 @@
-loadImage('./assets/life-forms.svg').then(typeImage => {
-  const colors = window.location.hash.substring(1).split(';').filter(v => v)
+const params = new URLSearchParams(window.location.search.substring(1))
 
-  const parseColors = i => colors[i]
-    .split(',')
-    .map(str => str.trim())
-    .map(parseFloat)
-    .map(value => value / 255)
+const getColorParam = key => {
+  try {
+    return params.get(key)
+      .split(',')
+      .map(str => str.trim())
+      .map(parseFloat)
+      .map(value => value / 255)
+  } catch (error) {
+    return null
+  }
+}
 
-  const foreground = colors[0] ? parseColors(0) : [1, 1, 1]
-  const background = colors[1] ? parseColors(1) : [0, 0, 0]
+const foreground = getColorParam('foreground') || [1, 1, 1]
+const background = getColorParam('background') || [0, 0, 0]
+const typeFile = params.get('typeFile') || 'web'
+const typeSize = parseFloat(params.get('typeSize') || 0.8, 10)
+const particlesMultiplier = parseFloat(params.get('particles') || 1, 10)
+const pixelRatio = parseFloat(params.get('pixelRatio') || 1, 10)
+const noiseScale = parseFloat(params.get('noiseScale') || 1, 10)
 
-  console.log(background, foreground)
-
-  const regl = window.createREGL({ pixelRatio: 1 })
+loadImage(`./assets/${typeFile}.svg`).then(typeImage => {
+  const regl = window.createREGL({ pixelRatio: pixelRatio })
   const canvas = document.querySelector('canvas')
 
   const { width, height } = canvas
@@ -23,7 +32,6 @@ loadImage('./assets/life-forms.svg').then(typeImage => {
   typeCanvas.width = width
   typeCanvas.height = height
 
-  const typeSize = 0.8
   const typeRatio = typeImage.width / typeImage.height
   const canvasRatio = typeCanvas.width / typeCanvas.height
 
@@ -66,7 +74,7 @@ loadImage('./assets/life-forms.svg').then(typeImage => {
     flipY: true
   })
 
-  const count = (width * height) / 100
+  const count = ((width * height) / 100) * particlesMultiplier
   const positions = new Float32Array(count * 2)
   const velocities = new Float32Array(count * 2)
 
@@ -249,7 +257,7 @@ loadImage('./assets/life-forms.svg').then(typeImage => {
       const yIndex = i + 1
 
       const xA = positions[xIndex] + shiftA
-      const yA = positions[yIndex] + shiftB
+      const yA = positions[yIndex] + shiftA
       const wrappedXA = xA - 1 * Math.floor(xA / 1)
       const wrappedYA = yA - 1 * Math.floor(yA / 1)
       const scaledXA = Math.floor(wrappedXA * noiseSize)
