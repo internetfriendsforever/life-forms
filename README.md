@@ -3,7 +3,7 @@
 Use the following html code to embed on any webpage:
 
 ```html
-<iframe src="https://life-forms.now.sh" width="655" height="368" style="border: 0;"></iframe>
+<iframe src="https://life-forms.now.sh?pixelRatio=2" width="655" height="368" style="border: 0;"></iframe>
 ```
 
 ### Size
